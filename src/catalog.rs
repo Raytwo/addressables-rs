@@ -275,7 +275,11 @@ impl Catalog {
             dependency_hash: hash,
             data_index: ExtraId(-1),
             primary_key,
-            resource_type: 4,
+            resource_type: if key.as_ref().ends_with(".bytes") {
+                12
+            } else {
+                4
+            },
         };
 
         // Add new entry
