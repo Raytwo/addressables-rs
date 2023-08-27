@@ -275,10 +275,13 @@ impl Catalog {
             dependency_hash: hash,
             data_index: ExtraId(-1),
             primary_key,
+            // Apologies to anybody trying to use this library, FE Engage forced me
             resource_type: if key.as_ref().ends_with(".bytes") {
                 12
             } else if internal_id.as_ref().ends_with(".png") {
                 1
+            } else if internal_id.as_ref().contains("FaceThumb/LevelUp/FaceThumb") && internal_id.as_ref().ends_with(".png") {
+                2
             } else {
                 4
             },
