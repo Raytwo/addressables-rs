@@ -277,7 +277,7 @@ impl Catalog {
             primary_key,
             resource_type: if key.as_ref().ends_with(".bytes") {
                 12
-            } else if key.as_ref().ends_with(".png") {
+            } else if internal_id.as_ref().ends_with(".png") {
                 1
             } else {
                 4
