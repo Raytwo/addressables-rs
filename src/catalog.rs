@@ -276,7 +276,7 @@ impl Catalog {
             data_index: ExtraId(-1),
             primary_key,
             // Apologies to anybody trying to use this library, FE Engage forced me
-            resource_type: if key.as_ref().ends_with(".bytes") {
+            resource_type: if key.as_ref().ends_with(".bytes") || key.as_ref().ends_with(".xml") {
                 12
             } else if internal_id.as_ref().contains("Telop/LevelUp/FaceThumb") && internal_id.as_ref().ends_with(".png") {
                 2
