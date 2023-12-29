@@ -248,7 +248,7 @@ impl Catalog {
         Ok(())
     }
 
-    pub fn add_prefab<S: AsRef<str>>(&mut self, internal_id: S, key: S, dependencies: &[String]) -> Result<(), CatalogError> {
+    pub fn add_prefab<S: AsRef<str>>(&mut self, resource_type: i32, internal_id: S, key: S, dependencies: &[String]) -> Result<(), CatalogError> {
         // TODO: This should be a method that combines both
         // Try to add the internal ID, return a Duplicate error if it already exists
         let iid = self.add_internalid(&internal_id)?;
@@ -275,16 +275,7 @@ impl Catalog {
             dependency_hash: hash,
             data_index: ExtraId(-1),
             primary_key,
-            // Apologies to anybody trying to use this library, FE Engage forced me
-            resource_type: if key.as_ref().ends_with(".bytes") || key.as_ref().ends_with(".xml") {
-                12
-            } else if internal_id.as_ref().contains("Telop/LevelUp/FaceThumb") && internal_id.as_ref().ends_with(".png") {
-                2
-            } else if internal_id.as_ref().ends_with(".png") {
-                1
-            } else {
-                4
-            },
+            resource_type,
         };
 
         // Add new entry
