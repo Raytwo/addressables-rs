@@ -1,6 +1,8 @@
 #![allow(dead_code)]
 #![allow(non_snake_case)]
 
+use std::borrow::Cow;
+
 use base64::{self, engine::general_purpose, Engine};
 use binrw::{BinRead, BinWrite};
 use rand::{self, Rng};
@@ -52,13 +54,15 @@ where
 }
 
 #[derive(Deserialize, Serialize)]
-pub struct Catalog {
+pub struct Catalog<'a> {
     m_LocatorId: String,
-    m_InstanceProviderData: ProviderData,
-    m_SceneProviderData: ProviderData,
-    m_ResourceProviderData: Vec<ProviderData>,
-    m_ProviderIds: Vec<String>,
-    pub m_InternalIds: Vec<String>,
+    m_InstanceProviderData: ProviderData<'a>,
+    m_SceneProviderData: ProviderData<'a>,
+    m_ResourceProviderData: Vec<ProviderData<'a>>,
+    #[serde(borrow)]
+    m_ProviderIds: Vec<&'a str>,
+    #[serde(borrow)]
+    pub m_InternalIds: Vec<Cow<'a, str>>,
     #[serde(deserialize_with = "deserialize_catalog_table", serialize_with = "serialize_catalog_table")]
     pub m_KeyDataString: KeyData,
     #[serde(deserialize_with = "deserialize_catalog_table", serialize_with = "serialize_catalog_table")]
@@ -67,46 +71,46 @@ pub struct Catalog {
     m_EntryDataString: EntryData,
     #[serde(deserialize_with = "deserialize_catalog_table", serialize_with = "serialize_catalog_table")]
     m_ExtraDataString: ExtraData,
-    m_resourceTypes: Vec<ObjectType>,
-    m_InternalIdPrefixes: Vec<String>,
+    m_resourceTypes: Vec<ObjectType<'a>>,
+    m_InternalIdPrefixes: Vec<&'a str>,
 }
 
 #[derive(Deserialize, Serialize)]
-pub struct ProviderData {
-    m_Id: String,
-    m_ObjectType: ObjectType,
-    m_Data: String,
+pub struct ProviderData<'a> {
+    m_Id: &'a str,
+    m_ObjectType: ObjectType<'a>,
+    m_Data: &'a str,
 }
 
 #[derive(Deserialize, Serialize)]
-pub struct ObjectType {
-    m_AssemblyName: String,
-    pub m_ClassName: String,
+pub struct ObjectType<'a> {
+    m_AssemblyName: &'a str,
+    pub m_ClassName: &'a str,
 }
 
-impl Catalog {
-    pub fn open<P: AsRef<std::path::Path>>(path: P) -> Result<Self, CatalogError> {
-        let catalog_str = &std::fs::read_to_string(path.as_ref())?;
-        serde_json::from_str(catalog_str).map_err(CatalogError::Json)
+impl<'a> Catalog<'a> {
+    // pub fn open<P: AsRef<std::path::Path>>(path: P) -> Result<Self, CatalogError> {
+    //     let catalog_str = std::fs::read_to_string(path.as_ref())?.as_mut_str();
+    //     serde_json::from_str(catalog_str).map_err(CatalogError::Json)
+    // }
+
+    pub fn from_str(string: &'a mut str) -> Result<Self, CatalogError> {
+        unsafe { simd_json::from_str(string).map_err(|_| CatalogError::MissingInternalId) }
     }
 
-    pub fn from_str<S: AsRef<str>>(string: S) -> Result<Self, CatalogError> {
-        serde_json::from_str(string.as_ref()).map_err(CatalogError::Json)
-    }
-
-    pub fn from_slice<S: AsRef<[u8]>>(slice: S) -> Result<Self, CatalogError> {
-        serde_json::from_slice(slice.as_ref()).map_err(CatalogError::Json)
+    pub fn from_slice(slice: &'a mut [u8]) -> Result<Self, CatalogError> {
+        serde_json::from_slice(slice).map_err(CatalogError::Json)
     }
 
     pub fn get_internal_id_index<S: AsRef<str>>(&self, internal_id: S) -> Option<InternalId> {
-        self.m_InternalIds.iter().position(|x| x == internal_id.as_ref()).map(InternalId::from)
+        self.m_InternalIds.iter().position(|x| x == &internal_id.as_ref()).map(InternalId::from)
     }
 
-    pub fn get_internal_id_from_index<I: Into<usize>>(&self, index: I) -> Option<&String> {
+    pub fn get_internal_id_from_index<I: Into<usize>>(&self, index: I) -> Option<&Cow<'_, str>> {
         self.m_InternalIds.get(index.into())
     }
 
-    pub fn get_internal_ids(&self) -> Vec<String> {
+    pub fn get_internal_ids(&self) -> Vec<Cow<'_, str>> {
         self.m_InternalIds.clone()
     }
 
@@ -144,7 +148,7 @@ impl Catalog {
 
     pub fn add_internalid<S: AsRef<str>>(&mut self, internal_id: S) -> Result<InternalId, CatalogError> {
         if self.get_internal_id_index(&internal_id).is_none() {
-            self.m_InternalIds.push(String::from(internal_id.as_ref()));
+            self.m_InternalIds.push(Cow::Owned(internal_id.as_ref().to_string()));
             Ok((self.m_InternalIds.len() - 1).into())
         } else {
             Err(CatalogError::DuplicateInternalId)
