@@ -131,6 +131,29 @@ impl ExtraValue {
     pub fn get_size(&self) -> u32 {
         (1 + 1 + self.assembly_name.len() + 1 + self.class_name.len() + 4 + self.json_text.len()) as u32
     }
+
+    pub fn for_bundle(base: &ExtraValue, bundle_name: &str, bundle_size: u64) -> Self {
+        let mut obj = serde_json::from_str::<serde_json::Value>(&base.json_text)
+            .ok()
+            .and_then(|v| match v { serde_json::Value::Object(m) => Some(m), _ => None })
+            .unwrap_or_default();
+
+        obj.insert("m_BundleName".to_owned(), serde_json::Value::String(bundle_name.to_owned()));
+        obj.insert("m_BundleSize".to_owned(), serde_json::Value::Number(serde_json::Number::from(bundle_size)));
+        obj.insert("m_Crc".to_owned(), serde_json::Value::Number(serde_json::Number::from(0u64)));
+
+        let json_text = serde_json::to_string(&serde_json::Value::Object(obj)).unwrap_or_default();
+
+        ExtraValue {
+            key_type: 7, // JsonObject
+            assembly_name_len: base.assembly_name.len() as u8,
+            assembly_name: base.assembly_name.clone(),
+            class_name_len: base.class_name.len() as u8,
+            class_name: base.class_name.clone(),
+            json_len: json_text.len() as i32,
+            json_text,
+        }
+    }
 }
 
 impl BinWrite for ExtraValue {

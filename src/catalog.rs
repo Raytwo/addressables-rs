@@ -75,14 +75,14 @@ pub struct Catalog<'a> {
     m_InternalIdPrefixes: Vec<&'a str>,
 }
 
-#[derive(Deserialize, Serialize)]
+#[derive(Clone, Deserialize, Serialize)]
 pub struct ProviderData<'a> {
     m_Id: &'a str,
     m_ObjectType: ObjectType<'a>,
     m_Data: &'a str,
 }
 
-#[derive(Deserialize, Serialize)]
+#[derive(Clone, Deserialize, Serialize)]
 pub struct ObjectType<'a> {
     m_AssemblyName: &'a str,
     pub m_ClassName: &'a str,
@@ -98,8 +98,29 @@ impl<'a> Catalog<'a> {
         unsafe { simd_json::from_str(string).map_err(|_| CatalogError::MissingInternalId) }
     }
 
-    pub fn from_slice(slice: &'a mut [u8]) -> Result<Self, CatalogError> {
+    pub fn from_slice(slice: &'a [u8]) -> Result<Self, CatalogError> {
         serde_json::from_slice(slice).map_err(CatalogError::Json)
+    }
+
+    pub fn empty_from_base(base: &Catalog<'a>, locator_id: String) -> Self {
+        Catalog {
+            m_LocatorId: locator_id,
+            m_InstanceProviderData: base.m_InstanceProviderData.clone(),
+            m_SceneProviderData: base.m_SceneProviderData.clone(),
+            m_ResourceProviderData: base.m_ResourceProviderData.clone(),
+            m_ProviderIds: base.m_ProviderIds.clone(),
+            m_InternalIds: Vec::new(),
+            m_KeyDataString: KeyData::default(),
+            m_BucketDataString: BucketData::default(),
+            m_EntryDataString: EntryData::default(),
+            m_ExtraDataString: ExtraData::default(),
+            m_resourceTypes: base.m_resourceTypes.clone(),
+            m_InternalIdPrefixes: base.m_InternalIdPrefixes.clone(),
+        }
+    }
+
+    pub fn serialize(&self) -> Result<String, CatalogError> {
+        serde_json::to_string(self).map_err(CatalogError::Json)
     }
 
     pub fn get_internal_id_index<S: AsRef<str>>(&self, internal_id: S) -> Option<InternalId> {
@@ -142,6 +163,43 @@ impl<'a> Catalog<'a> {
         self.m_ExtraDataString.entries.get(isize::from(id) as usize)
     }
 
+    pub fn get_extra_at_offset(&self, offset: u32) -> Option<&ExtraValue> {
+        let mut cursor = 0u32;
+        for extra in &self.m_ExtraDataString.entries {
+            if cursor == offset {
+                return Some(extra);
+            }
+            cursor += extra.get_size();
+        }
+        None
+    }
+
+    pub fn copy_bundle_from_base<S: AsRef<str>>(&mut self, base: &Catalog, internal_id: S) -> Result<bool, CatalogError> {
+        let internal_id = internal_id.as_ref();
+
+        if self.get_internal_id_index(internal_id).is_some() {
+            return Ok(false);
+        }
+
+        let Some(base_idx) = base.get_internal_id_index(internal_id) else {
+            return Ok(false);
+        };
+        let Some(entry) = base.get_entry_by_internal_id(base_idx) else {
+            return Ok(false);
+        };
+        let Some(KeyDataValue::String { string, .. }) = base.get_key(entry.primary_key) else {
+            return Ok(false);
+        };
+        let Some(extra) = base.get_extra_at_offset(entry.data_index.0 as u32) else {
+            return Ok(false);
+        };
+
+        let key = string.clone();
+        let extra = extra.clone();
+        self.add_bundle(internal_id, key.as_str(), extra)?;
+        Ok(true)
+    }
+
     pub fn get_dependencies(&self, entry: &EntryValue) -> Option<&[EntryId]> {
         Some(&self.get_bucket(entry.dependency_key_idx)?.indices)
     }
@@ -156,7 +214,10 @@ impl<'a> Catalog<'a> {
     }
 
     pub fn get_next_key_offset(&self) -> u32 {
-        self.m_BucketDataString.entries.last().unwrap().key_data_offset + self.m_KeyDataString.entries.last().unwrap().get_size()
+        match (self.m_BucketDataString.entries.last(), self.m_KeyDataString.entries.last()) {
+            (Some(bucket), Some(key)) => bucket.key_data_offset + key.get_size(),
+            _ => core::mem::size_of::<u32>() as u32,
+        }
     }
 
     pub fn get_next_extra_offset(&self) -> u32 {
